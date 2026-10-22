@@ -1,576 +1,248 @@
-import streamlit as st
+
+from pathlib import Path
 import pandas as pd
 import plotly.express as px
-from cassandra.cluster import Cluster
+import streamlit as st
 
 st.set_page_config(
-    page_title="E-Commerce Sales Analytics",
-    page_icon=None,
+    page_title="E-Commerce Product Analysis",
+    page_icon=" ",
     layout="wide"
 )
 
-# ---------------- DATA CONNECTION ----------------
-@st.cache_resource
-def connect_cassandra():
-    cluster = Cluster(["127.0.0.1"], port=9042)
-    session = cluster.connect("ecommerce")
-    return cluster, session
+DATA = Path(__file__).parent / "data"
+ORANGE = "#F28C28"
 
+if "dark" not in st.session_state:
+    st.session_state.dark = True
 
-@st.cache_data(ttl=60)
-def load_data():
-    _, session = connect_cassandra()
-
-    products = pd.DataFrame(
-        [row._asdict() for row in session.execute("SELECT * FROM products_summary")]
-    )
-    countries = pd.DataFrame(
-        [row._asdict() for row in session.execute("SELECT * FROM country_summary")]
-    )
-    monthly = pd.DataFrame(
-        [row._asdict() for row in session.execute("SELECT * FROM monthly_summary")]
+with st.sidebar:
+    st.title("E-Commerce Analytics")
+    st.toggle("Night mode", key="dark")
+    page = st.radio(
+        "NAVIGATION",
+        ["Home", "Overview", "Products",
+         "Country Analysis", "Monthly Analysis", "About"]
     )
 
-    for frame in (products, countries, monthly):
-        for column in ("total_revenue", "total_quantity", "average_price", "transactions"):
-            if column in frame.columns:
-                frame[column] = pd.to_numeric(frame[column], errors="coerce")
+dark = st.session_state.dark
+bg = "#111315" if dark else "#F5F7FA"
+panel = "#1B1F22" if dark else "#FFFFFF"
+fg = "#FFFFFF" if dark else "#20252B"
+grid = "#454B50" if dark else "#DDE2E8"
 
-    return products, countries, monthly
+st.markdown(f"""
+<style>
+.stApp {{background:{bg}; color:{fg};}}
+[data-testid="stSidebar"] {{background:{panel};}}
+.block-container {{padding-top:2rem;}}
+div[data-testid="stMetric"] {{
+background:{panel}; border:1px solid {grid};
+padding:16px; border-radius:12px;
+}}
+.hero {{
+background:{panel}; border:1px solid {ORANGE};
+border-radius:18px; padding:35px; margin-bottom:20px;
+}}
+</style>
+""", unsafe_allow_html=True)
 
+@st.cache_data
+def load_csv(filename):
+    return pd.read_csv(DATA / filename)
 
-# ---------------- THEME ----------------
-if "night_mode" not in st.session_state:
-    st.session_state["night_mode"] = True
+def clean_columns(df):
+    df = df.copy()
+    df.columns = [
+        str(c).strip().lower().replace(" ", "_")
+        for c in df.columns
+    ]
+    aliases = {
+        "stockcode": "stock_code",
+        "product": "description",
+        "product_name": "description",
+        "revenue": "total_revenue",
+        "sales": "total_revenue",
+        "quantity": "total_quantity",
+        "qty": "total_quantity",
+        "country_name": "country",
+        "invoicemonth": "month",
+        "invoice_month": "month",
+        "month_name": "month",
+        "avg_price": "average_price",
+        "transaction_count": "transactions"
+    }
+    return df.rename(
+        columns={c: aliases[c] for c in df.columns if c in aliases}
+    )
 
-night_mode = st.sidebar.toggle("Night mode", key="night_mode")
+products = clean_columns(load_csv("products_summary.csv"))
+countries = clean_columns(load_csv("country_summary.csv"))
+monthly = clean_columns(load_csv("monthly_summary.csv"))
 
-if night_mode:
-    bg = "#0B0B0D"
-    surface = "#171719"
-    sidebar_bg = "#111113"
-    text_color = "#F5F5F5"
-    muted = "#B7B7BF"
-    border = "#343438"
-    accent = "#FF4D00"
-    grid = "#38383D"
-    template = "plotly_dark"
-else:
-    bg = "#F4F4F5"
-    surface = "#FFFFFF"
-    sidebar_bg = "#E9E9EB"
-    text_color = "#202024"
-    muted = "#55555F"
-    border = "#D4D4D8"
-    accent = "#F04B00"
-    grid = "#DADAE0"
-    template = "plotly_white"
+for df in [products, countries, monthly]:
+    for col in ["total_revenue", "total_quantity",
+                "average_price", "transactions"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-st.markdown(
-    f"""
-    <style>
-    :root {{
-        --bg: {bg};
-        --surface: {surface};
-        --sidebar: {sidebar_bg};
-        --text: {text_color};
-        --muted: {muted};
-        --border: {border};
-        --accent: {accent};
-    }}
-
-    .stApp, [data-testid="stMain"] {{
-        background: var(--bg);
-        color: var(--text);
-    }}
-
-    [data-testid="stHeader"] {{
-        background: var(--bg);
-    }}
-
-    section[data-testid="stSidebar"] {{
-        background: var(--sidebar);
-        border-right: 1px solid var(--border);
-    }}
-
-    section[data-testid="stSidebar"] * {{
-        color: var(--text);
-    }}
-
-    h1, h2, h3, h4, p, label,
-    [data-testid="stMarkdownContainer"] p {{
-        color: var(--text);
-    }}
-
-    .main-title {{
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-left: 5px solid var(--accent);
-        border-radius: 12px;
-        padding: 22px 26px;
-        margin-bottom: 20px;
-    }}
-
-    .main-title h1 {{
-        color: var(--text) !important;
-        font-size: 30px;
-        margin: 0 0 7px 0;
-    }}
-
-    .main-title p {{
-        color: var(--muted) !important;
-        font-size: 15px;
-        margin: 0;
-    }}
-
-    div[data-testid="stMetric"] {{
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 17px 18px;
-        transition: border-color 0.2s ease, transform 0.2s ease;
-    }}
-
-    div[data-testid="stMetric"]:hover {{
-        border-color: var(--accent);
-        transform: translateY(-2px);
-    }}
-
-    [data-testid="stMetricLabel"] {{
-        color: var(--muted) !important;
-    }}
-
-    [data-testid="stMetricValue"] {{
-        color: var(--text) !important;
-    }}
-
-    .section-note {{
-        color: var(--muted);
-        font-size: 13px;
-        margin-top: -8px;
-        margin-bottom: 12px;
-    }}
-
-    .stButton button, .stDownloadButton button {{
-        background: var(--accent);
-        color: #FFFFFF !important;
-        border: 1px solid var(--accent);
-        border-radius: 8px;
-    }}
-
-    .stButton button:hover, .stDownloadButton button:hover {{
-        filter: brightness(0.92);
-        color: #FFFFFF !important;
-    }}
-
-    div[data-testid="stDataFrame"] {{
-        border: 1px solid var(--border);
-        border-radius: 10px;
-    }}
-
-    hr {{
-        border-color: var(--border);
-    }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# ---------------- CHART STYLE ----------------
-def style_chart(fig, height=390):
+def chart(fig, height=420):
     fig.update_layout(
-        template=template,
-        paper_bgcolor=surface,
-        plot_bgcolor=surface,
-        font=dict(
-            family="Arial, sans-serif",
-            size=13,
-            color=text_color
-        ),
-        title_font=dict(size=17, color=text_color),
-        legend_font=dict(color=text_color),
-        margin=dict(l=18, r=18, t=35, b=25),
         height=height,
-        transition_duration=300,
-        coloraxis_colorbar=dict(
-            tickfont=dict(color=text_color),
-            title_font=dict(color=text_color)
-        )
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=panel,
+        font_color=fg,
+        margin=dict(l=15, r=15, t=55, b=20)
     )
-    fig.update_xaxes(
-        gridcolor=grid,
-        linecolor=border,
-        zerolinecolor=grid,
-        tickfont=dict(color=text_color, size=12),
-        title_font=dict(color=text_color, size=13),
-        automargin=True
-    )
-    fig.update_yaxes(
-        gridcolor=grid,
-        linecolor=border,
-        zerolinecolor=grid,
-        tickfont=dict(color=text_color, size=12),
-        title_font=dict(color=text_color, size=13),
-        automargin=True
-    )
+    fig.update_xaxes(gridcolor=grid)
+    fig.update_yaxes(gridcolor=grid)
     return fig
 
+def money(n):
+    return f"£{n:,.2f}"
 
-def orange_scale():
-    return [[0, accent], [1, "#B8B8B8"]]
-
-
-# ---------------- HEADER ----------------
-st.markdown(
-    """
-    <div class="main-title">
-        <h1>E-Commerce Sales Analytics</h1>
-        <p>Explore revenue, product performance, country sales and monthly trends.</p>
+if page == "Home":
+    st.markdown("""
+    <div class="hero">
+    <h4 style="color:#F28C28">E-COMMERCE INTELLIGENCE</h4>
+    <h1>Smarter Insights.<br>Stronger Decisions.</h1>
+    <p>Explore product performance, country sales and monthly
+    revenue trends through interactive analytics.</p>
     </div>
-    """,
-    unsafe_allow_html=True
-)
+    """, unsafe_allow_html=True)
 
-try:
-    products, countries, monthly = load_data()
+    a, b, c = st.columns(3)
+    a.metric("Products analysed", len(products))
+    b.metric("Countries analysed", len(countries))
+    c.metric("Months analysed", len(monthly))
 
-    if products.empty or countries.empty or monthly.empty:
-        st.warning(
-            "One or more Cassandra summary tables are empty. "
-            "Check that the CSV files were imported into Cassandra."
-        )
+    st.subheader("Explore your data")
+    st.write("Choose Overview, Products, Country Analysis or "
+             "Monthly Analysis from the navigation menu.")
+
+elif page == "Overview":
+    st.title("Business Overview")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total revenue", money(
+        products["total_revenue"].sum()
+        if "total_revenue" in products else 0))
+    m2.metric("Quantity sold", f"{products['total_quantity'].sum():,.0f}"
+        if "total_quantity" in products else "N/A")
+    m3.metric("Products", len(products))
+    m4.metric("Countries", len(countries))
+
+    if {"description", "total_revenue"}.issubset(products.columns):
+        top = products.nlargest(10, "total_revenue").sort_values(
+            "total_revenue")
+        fig = px.bar(top, x="total_revenue", y="description",
+            orientation="h", title="Top 10 Products by Revenue",
+            color_discrete_sequence=[ORANGE])
+        st.plotly_chart(chart(fig, 480), use_container_width=True)
+
+    if {"country", "total_revenue"}.issubset(countries.columns):
+        top = countries.nlargest(10, "total_revenue").sort_values(
+            "total_revenue")
+        fig = px.bar(top, x="total_revenue", y="country",
+            orientation="h", title="Top 10 Countries by Revenue",
+            color_discrete_sequence=[ORANGE])
+        st.plotly_chart(chart(fig, 450), use_container_width=True)
+
+    if {"month", "total_revenue"}.issubset(monthly.columns):
+        fig = px.line(monthly.sort_values("month"), x="month",
+            y="total_revenue", markers=True,
+            title="Monthly Revenue Trend",
+            color_discrete_sequence=[ORANGE])
+        st.plotly_chart(chart(fig), use_container_width=True)
+
+elif page == "Products":
+    st.title("Product Analysis")
+    if "description" not in products.columns:
+        st.error("Could not find the product description column.")
         st.stop()
 
-    expected = {
-        "products": {"stock_code", "description", "total_revenue"},
-        "countries": {"country", "total_revenue", "total_quantity"},
-        "monthly": {"month", "total_revenue", "total_quantity"}
-    }
-    missing = []
-    for name, frame in (
-        ("products_summary", products),
-        ("country_summary", countries),
-        ("monthly_summary", monthly)
-    ):
-        absent = expected[
-            "products" if name == "products_summary"
-            else "countries" if name == "country_summary"
-            else "monthly"
-        ].difference(frame.columns)
-        if absent:
-            missing.append(f"{name}: {', '.join(sorted(absent))}")
+    search = st.text_input("Search products")
+    view = products.copy()
+    if search:
+        mask = view["description"].astype(str).str.contains(
+            search, case=False, na=False)
+        if "stock_code" in view.columns:
+            mask |= view["stock_code"].astype(str).str.contains(
+                search, case=False, na=False)
+        view = view[mask]
 
-    if missing:
-        st.error("Some expected Cassandra columns are missing.")
-        st.code("\n".join(missing))
+    options = [c for c in [
+        "total_revenue", "total_quantity", "transactions",
+        "average_price", "description"
+    ] if c in view.columns]
+
+    if options:
+        sort_by = st.selectbox("Sort products by", options)
+        view = view.sort_values(
+            sort_by, ascending=(sort_by == "description"))
+
+    st.dataframe(view, use_container_width=True, hide_index=True)
+    st.download_button("Download product CSV",
+        view.to_csv(index=False).encode("utf-8"),
+        "products.csv", "text/csv")
+
+elif page == "Country Analysis":
+    st.title("Country Analysis")
+    if "country" not in countries.columns:
+        st.error("Could not find the country column.")
         st.stop()
 
-    # Sidebar navigation
-    page = st.sidebar.radio(
-        "Navigation",
-        ["Overview", "Products", "Country Analysis", "Monthly Analysis", "About"]
-    )
+    names = sorted(countries["country"].dropna().astype(str).unique())
+    selected = st.multiselect(
+        "Select countries", names, default=names[:min(10, len(names))])
+    view = countries[countries["country"].astype(str).isin(selected)]
 
-    # ---------------- OVERVIEW ----------------
-    if page == "Overview":
-        st.subheader("Business Overview")
-        st.markdown(
-            '<div class="section-note">Key figures calculated from the imported summary data.</div>',
-            unsafe_allow_html=True
-        )
+    if "total_revenue" in view.columns:
+        fig = px.bar(view.sort_values("total_revenue"),
+            x="total_revenue", y="country", orientation="h",
+            title="Revenue by Country",
+            color_discrete_sequence=[ORANGE])
+        st.plotly_chart(chart(fig, max(420, 30 * len(view))),
+            use_container_width=True)
 
-        total_revenue = countries["total_revenue"].fillna(0).sum()
-        total_quantity = countries["total_quantity"].fillna(0).sum()
-        product_count = products["stock_code"].nunique()
-        country_count = countries["country"].nunique()
+    st.dataframe(view, use_container_width=True, hide_index=True)
+    st.download_button("Download country CSV",
+        view.to_csv(index=False).encode("utf-8"),
+        "countries.csv", "text/csv")
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Revenue", f"£{total_revenue:,.2f}")
-        c2.metric("Quantity Sold", f"{total_quantity:,.0f}")
-        c3.metric("Products", f"{product_count:,}")
-        c4.metric("Countries", f"{country_count:,}")
+elif page == "Monthly Analysis":
+    st.title("Monthly Analysis")
+    if "month" not in monthly.columns:
+        st.error("Could not find the month column.")
+        st.stop()
 
-        st.divider()
+    view = monthly.sort_values("month").copy()
+    if "total_revenue" in view.columns:
+        fig = px.line(view, x="month", y="total_revenue",
+            markers=True, title="Monthly Revenue",
+            color_discrete_sequence=[ORANGE])
+        st.plotly_chart(chart(fig), use_container_width=True)
 
-        left, right = st.columns(2)
+    if "total_quantity" in view.columns:
+        fig = px.bar(view, x="month", y="total_quantity",
+            title="Monthly Quantity Sold",
+            color_discrete_sequence=[ORANGE])
+        st.plotly_chart(chart(fig), use_container_width=True)
 
-        with left:
-            st.subheader("Top Products by Revenue")
-            st.markdown(
-                '<div class="section-note">Highest-revenue products in the dataset.</div>',
-                unsafe_allow_html=True
-            )
-            top_products = products.nlargest(10, "total_revenue").copy()
-            top_products["product_label"] = top_products["description"].fillna(
-                top_products["stock_code"].astype(str)
-            ).astype(str).str.slice(0, 42)
-            top_products = top_products.sort_values("total_revenue")
+    st.dataframe(view, use_container_width=True, hide_index=True)
+    st.download_button("Download monthly CSV",
+        view.to_csv(index=False).encode("utf-8"),
+        "monthly.csv", "text/csv")
 
-            fig = px.bar(
-                top_products,
-                x="total_revenue",
-                y="product_label",
-                orientation="h",
-                color="total_revenue",
-                color_continuous_scale=orange_scale(),
-                hover_data={
-                    "product_label": True,
-                    "stock_code": True,
-                    "total_revenue": ":,.2f",
-                    "total_quantity": ":,.0f" if "total_quantity" in top_products else False
-                },
-                labels={
-                    "total_revenue": "Revenue (£)",
-                    "product_label": "Product",
-                    "stock_code": "Stock code"
-                }
-            )
-            fig.update_layout(
-                showlegend=False,
-                coloraxis_showscale=False,
-                xaxis_title="Revenue (£)",
-                yaxis_title=""
-            )
-            style_chart(fig, height=420)
-            st.plotly_chart(fig, use_container_width=True)
+else:
+    st.title("About this project")
+    st.write("""
+    This project explores online retail transactions through product,
+    country and monthly summaries.
 
-        with right:
-            st.subheader("Top Countries by Revenue")
-            st.markdown(
-                '<div class="section-note">Use the selector to compare all countries or exclude the largest market.</div>',
-                unsafe_allow_html=True
-            )
-            exclude_uk = st.checkbox("Exclude United Kingdom to compare other countries")
-            country_plot = countries.copy()
-            if exclude_uk:
-                country_plot = country_plot[
-                    country_plot["country"].astype(str).str.lower() != "united kingdom"
-                ]
+    **Technologies:** Python, Pandas, Plotly, Streamlit,
+    Apache Spark and Cassandra in the local data workflow.
 
-            top_countries = country_plot.nlargest(10, "total_revenue").sort_values(
-                "total_revenue"
-            )
-            fig = px.bar(
-                top_countries,
-                x="total_revenue",
-                y="country",
-                orientation="h",
-                color="total_revenue",
-                color_continuous_scale=orange_scale(),
-                hover_data={"total_revenue": ":,.2f"},
-                labels={"total_revenue": "Revenue (£)", "country": "Country"}
-            )
-            fig.update_layout(
-                showlegend=False,
-                coloraxis_showscale=False,
-                xaxis_title="Revenue (£)",
-                yaxis_title=""
-            )
-            style_chart(fig, height=420)
-            st.plotly_chart(fig, use_container_width=True)
-
-        st.divider()
-        st.subheader("Monthly Revenue Trend")
-        st.markdown(
-            '<div class="section-note">Hover over the line to inspect revenue for each month.</div>',
-            unsafe_allow_html=True
-        )
-        monthly_plot = monthly.copy()
-        monthly_plot["month"] = monthly_plot["month"].astype(str)
-        monthly_plot = monthly_plot.sort_values("month")
-
-        fig = px.line(
-            monthly_plot,
-            x="month",
-            y="total_revenue",
-            markers=True,
-            hover_data={"total_revenue": ":,.2f"},
-            labels={"month": "Month", "total_revenue": "Revenue (£)"}
-        )
-        fig.update_traces(
-            line=dict(color=accent, width=3),
-            marker=dict(color=accent, size=8)
-        )
-        style_chart(fig, height=360)
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ---------------- PRODUCTS ----------------
-    elif page == "Products":
-        st.subheader("Product Performance")
-        st.markdown(
-            '<div class="section-note">Search, rank and download the product summary.</div>',
-            unsafe_allow_html=True
-        )
-
-        search = st.text_input(
-            "Search by product description or stock code",
-            placeholder="Type a product name or stock code"
-        )
-        sort_order = st.selectbox(
-            "Sort products by",
-            ["Highest revenue", "Lowest revenue", "Highest quantity"]
-        )
-
-        filtered = products.copy()
-        if search:
-            desc_match = filtered["description"].astype(str).str.contains(
-                search, case=False, na=False
-            )
-            code_match = filtered["stock_code"].astype(str).str.contains(
-                search, case=False, na=False
-            )
-            filtered = filtered[desc_match | code_match]
-
-        if sort_order == "Highest revenue":
-            filtered = filtered.sort_values("total_revenue", ascending=False)
-        elif sort_order == "Lowest revenue":
-            filtered = filtered.sort_values("total_revenue", ascending=True)
-        elif "total_quantity" in filtered.columns:
-            filtered = filtered.sort_values("total_quantity", ascending=False)
-
-        st.write(f"Matching products: {len(filtered):,}")
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
-
-        st.download_button(
-            "Download Product Summary CSV",
-            data=filtered.to_csv(index=False).encode("utf-8"),
-            file_name="products_summary.csv",
-            mime="text/csv"
-        )
-
-    # ---------------- COUNTRY ANALYSIS ----------------
-    elif page == "Country Analysis":
-        st.subheader("Country Sales Comparison")
-        st.markdown(
-            '<div class="section-note">Select one or more countries to compare their performance.</div>',
-            unsafe_allow_html=True
-        )
-
-        available_countries = sorted(
-            countries["country"].dropna().astype(str).unique().tolist()
-        )
-        selected = st.multiselect(
-            "Countries",
-            options=available_countries,
-            default=available_countries[:5]
-        )
-        filtered = countries[countries["country"].astype(str).isin(selected)].copy()
-
-        a, b = st.columns(2)
-        a.metric("Selected Revenue", f"£{filtered['total_revenue'].fillna(0).sum():,.2f}")
-        b.metric("Selected Quantity", f"{filtered['total_quantity'].fillna(0).sum():,.0f}")
-
-        chart_data = filtered.sort_values("total_revenue")
-        fig = px.bar(
-            chart_data,
-            x="total_revenue",
-            y="country",
-            orientation="h",
-            color="total_revenue",
-            color_continuous_scale=orange_scale(),
-            hover_data={"total_revenue": ":,.2f"},
-            labels={"total_revenue": "Revenue (£)", "country": "Country"}
-        )
-        fig.update_layout(
-            showlegend=False,
-            coloraxis_showscale=False,
-            xaxis_title="Revenue (£)",
-            yaxis_title=""
-        )
-        style_chart(fig, height=max(350, min(650, 38 * len(chart_data) + 100)))
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.dataframe(
-            filtered.sort_values("total_revenue", ascending=False),
-            use_container_width=True,
-            hide_index=True
-        )
-        st.download_button(
-            "Download Country Summary CSV",
-            data=filtered.to_csv(index=False).encode("utf-8"),
-            file_name="country_summary.csv",
-            mime="text/csv"
-        )
-
-    # ---------------- MONTHLY ANALYSIS ----------------
-    elif page == "Monthly Analysis":
-        st.subheader("Monthly Performance")
-        st.markdown(
-            '<div class="section-note">Compare monthly revenue and quantities from the summary table.</div>',
-            unsafe_allow_html=True
-        )
-
-        monthly_plot = monthly.copy()
-        monthly_plot["month"] = monthly_plot["month"].astype(str)
-        monthly_plot = monthly_plot.sort_values("month")
-
-        if len(monthly_plot) > 1:
-            month_options = ["All months"] + monthly_plot["month"].tolist()
-            month_choice = st.selectbox("Filter month", month_options)
-            if month_choice != "All months":
-                monthly_plot = monthly_plot[monthly_plot["month"] == month_choice]
-
-        a, b = st.columns(2)
-        a.metric("Revenue in View", f"£{monthly_plot['total_revenue'].fillna(0).sum():,.2f}")
-        b.metric("Quantity in View", f"{monthly_plot['total_quantity'].fillna(0).sum():,.0f}")
-
-        fig = px.bar(
-            monthly_plot,
-            x="month",
-            y="total_revenue",
-            color="total_revenue",
-            color_continuous_scale=orange_scale(),
-            hover_data={"total_revenue": ":,.2f"},
-            labels={"month": "Month", "total_revenue": "Revenue (£)"}
-        )
-        fig.update_layout(
-            showlegend=False,
-            coloraxis_showscale=False,
-            xaxis_title="Month",
-            yaxis_title="Revenue (£)"
-        )
-        style_chart(fig, height=360)
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.dataframe(monthly_plot, use_container_width=True, hide_index=True)
-        st.download_button(
-            "Download Monthly Summary CSV",
-            data=monthly_plot.to_csv(index=False).encode("utf-8"),
-            file_name="monthly_summary.csv",
-            mime="text/csv"
-        )
-
-    # ---------------- ABOUT ----------------
-    elif page == "About":
-        st.subheader("Project Information")
-        st.write(
-            "This project analyzes online retail transactions and displays "
-            "summarized business results in an interactive dashboard."
-        )
-
-        st.markdown("**Technologies used**")
-        st.markdown(
-            "- Apache Spark (PySpark) for data processing\n"
-            "- Apache Cassandra for storing summary tables\n"
-            "- Streamlit for the dashboard interface\n"
-            "- Pandas for data handling\n"
-            "- Plotly for interactive visualizations"
-        )
-
-        st.markdown("**Project objectives**")
-        st.markdown(
-            "- Identify products generating the most revenue\n"
-            "- Compare sales across countries\n"
-            "- Analyze monthly revenue trends\n"
-            "- Search and filter product information\n"
-            "- Download summary reports"
-        )
-
-except Exception as error:
-    st.error("The dashboard could not load data from Cassandra.")
-    st.write(
-        "Confirm Cassandra is running and the ecommerce keyspace contains "
-        "products_summary, country_summary and monthly_summary."
-    )
-    st.code(f"{type(error).__name__}: {error}")
+    The hosted dashboard reads CSV summaries committed to GitHub.
+    It does not connect to Cassandra on a personal computer.
+    """)
