@@ -357,71 +357,93 @@ page = st.session_state.page
 
 if page == "Home":
 
+    st.markdown("""
+    <div class="hero">
+        <div class="eyebrow">E-COMMERCE INTELLIGENCE / 01</div>
+        <h1>Understand your data.<br>
+        <span class="accent">Transform your decisions.</span></h1>
+        <p>
+        An interactive retail analytics experience for exploring
+        product performance, market contribution and monthly sales.
+        Turn historical transactions into meaningful business insights.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.markdown(
-        """
-        <div class="hero">
-            <h1>Understand Your Data.<br>
-            Transform Your Decisions.</h1>
-            <p>
-                Explore e-commerce performance through product insights,
-                country-wise revenue, and monthly sales trends.
-            </p>
-        </div>
-        """,
+        "<div class='section-label'>YOUR BUSINESS AT A GLANCE</div>",
         unsafe_allow_html=True
     )
 
-    st.subheader("Your Business at a Glance")
+    k1, k2, k3 = st.columns(3)
 
-    col1, col2, col3 = st.columns(3)
+    k1.metric("Products analysed", f"{len(products):,}")
+    k2.metric("Countries analysed", f"{len(countries):,}")
+    k3.metric("Months analysed", f"{len(monthly):,}")
 
-    total_revenue = get_total(products, "total_revenue")
-    total_quantity = get_total(products, "total_quantity")
-    product_count = len(products)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("Explore the platform")
+    st.caption("Choose an area to start exploring your retail data.")
 
-    with col1:
-        st.metric(
-            "Total Revenue",
-            money(total_revenue)
+    a, b = st.columns(2)
+
+    with a:
+        st.markdown("### 01 / Business overview")
+        st.write(
+            "Explore revenue indicators, leading products, "
+            "country performance and monthly trends."
+        )
+        st.button(
+            "Open overview →",
+            type="primary",
+            use_container_width=True,
+            on_click=go_to,
+            args=("Overview",)
         )
 
-    with col2:
-        st.metric(
-            "Units Sold",
-            f"{total_quantity:,.0f}"
+        st.markdown("### 02 / Product intelligence")
+        st.write(
+            "Search products, sort performance metrics and "
+            "identify high-revenue items."
+        )
+        st.button(
+            "Explore products →",
+            use_container_width=True,
+            on_click=go_to,
+            args=("Products",)
         )
 
-    with col3:
-        st.metric(
-            "Products Analysed",
-            f"{product_count:,}"
+    with b:
+        st.markdown("### 03 / Market performance")
+        st.write(
+            "Compare country-level sales and investigate "
+            "which markets contribute most revenue."
+        )
+        st.button(
+            "Explore countries →",
+            use_container_width=True,
+            on_click=go_to,
+            args=("Country Analysis",)
         )
 
-    st.write("")
+        st.markdown("### 04 / Revenue over time")
+        st.write(
+            "Explore monthly revenue and quantity patterns "
+            "using interactive charts."
+        )
+        st.button(
+            "Explore monthly trends →",
+            use_container_width=True,
+            on_click=go_to,
+            args=("Monthly Analysis",)
+        )
 
-    st.subheader("Explore the Dashboard")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("Product Insights", use_container_width=True):
-            go_to("Products")
-            st.rerun()
-
-    with col2:
-        if st.button("Country Performance", use_container_width=True):
-            go_to("Country Analysis")
-            st.rerun()
-
-    with col3:
-        if st.button("Monthly Trends", use_container_width=True):
-            go_to("Monthly Analysis")
-            st.rerun()
-
-    st.info(
-        "Use the sidebar to explore the dashboard pages, "
-        "filter results, and download summary data."
+    st.markdown("---")
+    st.caption(
+        "BUILT WITH PYTHON · PANDAS · PLOTLY · STREAMLIT"
     )
+
+
 
 
 # --------------------------------------------------
