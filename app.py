@@ -948,4 +948,3 @@ elif page == "About":
     st.caption(
         "E-Commerce Product Analysis | Data-driven business insights"
     )
-```
