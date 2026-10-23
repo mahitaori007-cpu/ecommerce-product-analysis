@@ -108,13 +108,16 @@ st.markdown(
     .hero {{
         padding: 35px;
         border-radius: 18px;
-        background: linear-gradient(
-            120deg,
-            #321B0D 0%,
-            #71380F 45%,
-            #F28C28 100%
-        );
-        color: white;
+        background:
+            radial-gradient(
+                ellipse at top right,
+                rgba(242, 140, 40, 0.20) 0%,
+                rgba(242, 140, 40, 0.07) 28%,
+                transparent 58%
+            ),
+            {CARD};
+        border: 1px solid {GRID};
+        color: {FG};
         margin-bottom: 25px;
     }}
 
