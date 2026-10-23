@@ -13,6 +13,19 @@ st.set_page_config(
 DATA = Path(__file__).parent / "data"
 ORANGE = "#F28C28"
 
+ORANGE_SHADES = [
+    "#C65D12",
+    "#E87518",
+    "#F28C28",
+    "#FFAD55",
+    "#FFD0A0",
+    "#E9944A",
+    "#B94E0B",
+    "#F6B26B",
+    "#D97726",
+    "#FFC078",
+]
+
 if "dark" not in st.session_state:
     st.session_state.dark = True
 
@@ -511,7 +524,7 @@ elif page == "Overview":
                     "total_revenue": "Revenue (£)",
                     "description": "Product"
                 },
-                color_discrete_sequence=[ORANGE],
+                color_discrete_sequence=ORANGE_SHADES,
                 hover_data=["total_revenue"]
             )
 
@@ -537,7 +550,7 @@ elif page == "Overview":
                     "total_revenue": "Revenue (£)",
                     "country": "Country"
                 },
-                color_discrete_sequence=[ORANGE]
+                color_discrete_sequence=ORANGE_SHADES
             )
 
             st.plotly_chart(
@@ -667,7 +680,7 @@ elif page == "Products":
                 "total_revenue": "Revenue (£)",
                 "description": "Product"
             },
-            color_discrete_sequence=[ORANGE]
+            color_discrete_sequence=ORANGE_SHADES
         )
 
         st.plotly_chart(
@@ -831,7 +844,7 @@ elif page == "Monthly Analysis":
                 "month": "Month",
                 "total_quantity": "Quantity"
             },
-            color_discrete_sequence=[ORANGE]
+            color_discrete_sequence=ORANGE_SHADES
         )
 
         st.plotly_chart(
